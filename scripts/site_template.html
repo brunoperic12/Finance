@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How Market Makers Work</title>
+<meta name="description" content="A student research project on market microstructure and high-frequency market making, with open code and a reproducible simulation.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: one calm reading column, charts and tables allowed to run wider; a ledger-like feel (mono numbers, hairline rules). */
+:root {
+  --bg: #f3f5f8;
+  --surface: #ffffff;
+  --ink: #0e1b2c;
+  --muted: #55627a;
+  --rule: #d7dde7;
+  --accent: #1d5fe0;
+  --accent-soft: #e3ecfd;
+  --sym: #9aa5b8;
+  --warn: #b4540a;
+  --font-display: "Bricolage Grotesque", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0b1320; --surface: #121c2e; --ink: #e8edf6; --muted: #9aa8c0; --rule: #25324a;
+    --accent: #6ea0ff; --accent-soft: #17284a; --sym: #6b7891; --warn: #f0a566; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0b1320; --surface: #121c2e; --ink: #e8edf6; --muted: #9aa8c0; --rule: #25324a;
+  --accent: #6ea0ff; --accent-soft: #17284a; --sym: #6b7891; --warn: #f0a566; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 400 17px/1.65 var(--font-body); }
+a { color: var(--accent); text-underline-offset: 3px; }
+a:focus-visible, summary:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; border-radius: 3px; }
+.wrap { max-width: 760px; margin: 0 auto; padding: 0 20px; }
+header.top { border-bottom: 1px solid var(--rule); background: var(--surface); }
+header.top .wrap { padding-top: 56px; padding-bottom: 44px; }
+.kicker { font: 500 13px var(--font-mono); color: var(--muted); letter-spacing: .02em; margin: 0 0 14px; }
+h1 { font: 700 clamp(34px, 6vw, 54px)/1.08 var(--font-display); margin: 0 0 18px; text-wrap: balance; letter-spacing: -.015em; }
+.lede { font-size: 20px; color: var(--muted); margin: 0 0 24px; max-width: 60ch; }
+.links { display: flex; flex-wrap: wrap; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.links a { display: inline-block; padding: 9px 16px; border-radius: 8px; border: 1px solid var(--rule); text-decoration: none; color: var(--ink); font-weight: 500; font-size: 15px; }
+.links a.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+:root[data-theme="dark"] .links a.primary { color: #08111f; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .links a.primary { color: #08111f; } }
+nav.toc { border-bottom: 1px solid var(--rule); background: var(--bg); position: sticky; top: 0; z-index: 2; }
+nav.toc .wrap { display: flex; gap: 20px; overflow-x: auto; padding-top: 12px; padding-bottom: 12px; font-size: 14px; white-space: nowrap; }
+nav.toc a { color: var(--muted); text-decoration: none; }
+nav.toc a:hover { color: var(--ink); }
+section { padding: 52px 0 8px; }
+h2 { font: 700 30px/1.15 var(--font-display); margin: 0 0 16px; text-wrap: balance; letter-spacing: -.01em; }
+h3 { font: 600 18px/1.3 var(--font-body); margin: 28px 0 6px; }
+p { margin: 0 0 16px; max-width: 66ch; }
+.status { display: inline-flex; gap: 8px; align-items: center; font: 500 13px var(--font-mono); padding: 5px 11px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); margin-bottom: 18px; }
+.status.warn { background: transparent; border: 1px solid var(--warn); color: var(--warn); }
+.callout { border-left: 4px solid var(--accent); background: var(--surface); padding: 16px 20px; border-radius: 0 10px 10px 0; margin: 22px 0; max-width: 66ch; }
+.callout p:last-child { margin-bottom: 0; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin: 24px 0; }
+.stat { background: var(--surface); border: 1px solid var(--rule); border-radius: 12px; padding: 16px 18px; }
+.stat b { display: block; font: 500 30px/1.2 var(--font-mono); letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.stat span { font-size: 14px; color: var(--muted); }
+figure { margin: 26px 0; background: var(--surface); border: 1px solid var(--rule); border-radius: 12px; padding: 18px 16px 14px; }
+figcaption { font-size: 14px; color: var(--muted); margin: 8px 4px 0; }
+.legend { display: flex; gap: 18px; font-size: 14px; margin: 0 4px 6px; flex-wrap: wrap; }
+.legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 7px; vertical-align: -1px; }
+.chart { width: 100%; height: auto; display: block; }
+.chart .grid { stroke: var(--rule); stroke-width: 1; }
+.chart .tick { fill: var(--muted); font: 12px var(--font-mono); }
+.chart .axis { fill: var(--muted); font: 12px var(--font-body); }
+.bar-as { fill: var(--accent); }
+.bar-sym { fill: var(--sym); }
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 15px; min-width: 460px; }
+th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--rule); vertical-align: middle; }
+thead th { font: 500 13px var(--font-mono); color: var(--muted); }
+tbody th { font: 500 15px var(--font-mono); }
+td { position: relative; }
+.bar { display: block; height: 6px; border-radius: 3px; margin-bottom: 4px; }
+.b-profit { background: var(--accent); }
+.b-risk { background: var(--warn); }
+.num { font: 400 14px var(--font-mono); font-variant-numeric: tabular-nums; }
+.sched td, .sched th { font-size: 15px; }
+.sched td:first-child { font: 500 13px var(--font-mono); white-space: nowrap; color: var(--muted); }
+ol.steps, ul.plain { padding-left: 22px; max-width: 66ch; margin: 0 0 16px; }
+ol.steps li, ul.plain li { margin-bottom: 8px; }
+code, pre { font-family: var(--font-mono); font-size: 14px; }
+pre { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 14px 16px; overflow-x: auto; max-width: 100%; margin: 0 0 18px; line-height: 1.55; }
+:not(pre) > code { background: var(--accent-soft); padding: 1px 6px; border-radius: 5px; }
+details { border: 1px solid var(--rule); background: var(--surface); border-radius: 10px; padding: 12px 16px; margin-bottom: 10px; max-width: 66ch; }
+summary { cursor: pointer; font-weight: 600; }
+details p { margin: 10px 0 0; }
+.papers a { font-weight: 500; }
+footer { margin-top: 64px; padding: 30px 0 60px; border-top: 1px solid var(--rule); color: var(--muted); font-size: 14px; }
+@media (max-width: 480px) { body { font-size: 16px; } section { padding-top: 40px; } }
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <p class="kicker">Student research project &middot; open code &middot; work in progress</p>
+    <h1>How market makers work, and what happens when you simulate one</h1>
+    <p class="lede">Every stock trade has someone on the other side. This project studies the firms that stand there all day, how they price risk, and whether their strategies hold up when we test them ourselves.</p>
+    <ul class="links">
+      <li><a class="primary" href="#results">See the results so far</a></li>
+      <li><a href="{{REPO}}">Code on GitHub</a></li>
+      <li><a href="#follow">Follow along</a></li>
+    </ul>
+  </div>
+</header>
+
+<nav class="toc" aria-label="Sections">
+  <div class="wrap">
+    <a href="#basics">The basics</a>
+    <a href="#project">The project</a>
+    <a href="#results">Results</a>
+    <a href="#reading">Reading list</a>
+    <a href="#roadmap">Roadmap</a>
+    <a href="#limits">Limits</a>
+    <a href="#follow">Run it yourself</a>
+  </div>
+</nav>
+
+<main class="wrap">
+
+<section id="basics">
+  <h2>The basics, in plain language</h2>
+  <p>When you buy a stock, you rarely buy it from another investor at that exact moment. Usually you buy from a <strong>market maker</strong>: a firm that is always willing to sell at a slightly higher price (the <em>ask</em>) and buy at a slightly lower one (the <em>bid</em>). The gap between them is the <strong>spread</strong>, and it is how the market maker earns a living.</p>
+  <p>Some of the biggest market makers trade at speeds measured in microseconds. That is what people mean by <strong>high-frequency trading</strong> (HFT). It is a controversial topic, so the project starts with the fundamentals instead of taking a side.</p>
+  <h3>Why the spread exists</h3>
+  <p>Two risks make market making hard.</p>
+  <ul class="plain">
+    <li><strong>Adverse selection.</strong> Some people trading with you know more than you do. If a buyer knows the price is about to rise, selling to them loses money. The spread is partly compensation for that.</li>
+    <li><strong>Inventory risk.</strong> Each trade changes what the market maker holds. A long position loses money if the price falls, so holding too much of anything is dangerous.</li>
+  </ul>
+  <p>Our simulation focuses on the second risk. Our reading list covers the first.</p>
+</section>
+
+<section id="project">
+  <span class="status warn">Status: simulation done, real-market data analysis next</span>
+  <h2>What this project does</h2>
+  <p>Two parts, built in the open so anyone can check the work.</p>
+  <ol class="steps">
+    <li><strong>A simulation (finished).</strong> We implemented the classic market-making model from Avellaneda and Stoikov (2008) and compared it with a naive quoter.</li>
+    <li><strong>A study of real trades (next).</strong> We will measure volatility, estimated spreads and buy/sell pressure using free public Binance data, and test whether they move together the way theory predicts.</li>
+  </ol>
+  <div class="callout">
+    <p><strong>What this page does not claim.</strong> Everything below comes from a simulation with made-up price paths. It shows how the model behaves. It does not show that anyone could profit from it in a real market.</p>
+  </div>
+</section>
+
+<section id="results">
+  <h2>Results so far</h2>
+  <p>We simulated one trading session {{N}} times for two market makers who face the same random prices and the same random buyers and sellers. The only difference is how they set quotes.</p>
+  <ul class="plain">
+    <li><strong>Symmetric quoter.</strong> Always quotes the same distance either side of the current price.</li>
+    <li><strong>Inventory-aware quoter (Avellaneda-Stoikov).</strong> Moves both quotes down when it is holding too much stock, to attract buyers, and up when it is short.</li>
+  </ul>
+
+  <div class="stats">
+    <div class="stat"><b>{{ISD_RATIO}}x</b><span>smaller swings in final inventory with the inventory-aware quoter</span></div>
+    <div class="stat"><b>{{PSD_RATIO}}x</b><span>smaller swings in profit and loss</span></div>
+    <div class="stat"><b>{{PNL_GAP}}%</b><span>lower average profit, the price paid for that safety</span></div>
+  </div>
+
+  <figure>
+    <div class="legend" aria-hidden="true">
+      <span><i style="background:var(--sym)"></i>Symmetric quoter</span>
+      <span><i style="background:var(--accent)"></i>Inventory-aware quoter</span>
+    </div>
+    {{HIST}}
+    <figcaption>How much stock each market maker was left holding at the end of a session. The inventory-aware quoter ends close to zero far more often. The standard deviation of final inventory is {{AS_ISD}} shares versus {{SYM_ISD}} for the symmetric quoter.</figcaption>
+  </figure>
+
+  <div class="tablewrap">
+  <table>
+    <caption class="sr" style="text-align:left;font-size:14px;color:var(--muted);padding:0 12px 8px">Average over {{N}} simulated sessions, price units</caption>
+    <thead><tr><th></th><th>Average profit</th><th>Std. dev. of profit</th><th>Std. dev. of inventory</th></tr></thead>
+    <tbody>
+      <tr><th scope="row">Symmetric</th><td class="num">{{SYM_PNL}}</td><td class="num">{{SYM_PSD}}</td><td class="num">{{SYM_ISD}}</td></tr>
+      <tr><th scope="row">Inventory-aware</th><td class="num">{{AS_PNL}}</td><td class="num">{{AS_PSD}}</td><td class="num">{{AS_ISD}}</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>Safety costs money</h3>
+  <p>The model has a risk-aversion setting called gamma. Turning it up makes the market maker more eager to get back to zero inventory. The table shows what that does. Safer inventory comes with lower average profit, and the trade-off is steep at high settings.</p>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Risk aversion (gamma)</th><th>Average profit</th><th>Std. dev. of inventory</th></tr></thead>
+    <tbody>{{SWEEP}}</tbody>
+  </table>
+  </div>
+  <p style="margin-top:14px;color:var(--muted);font-size:14px">Settings for the main comparison: gamma = {{GAMMA}}, price volatility = {{SIGMA}}, order-book decay k = {{K}}, base arrival rate A = {{AA}}. The sweep uses 400 sessions per row. All runs use fixed random seeds, so you can reproduce every number (see the bottom of the page).</p>
+</section>
+
+<section id="reading">
+  <h2>Reading list</h2>
+  <p>Three papers anchor the project. We link to where each can be read and summarize each in our own words.</p>
+  <div class="papers">
+  <details open>
+    <summary>Glosten and Milgrom (1985), Journal of Financial Economics</summary>
+    <p>Shows why spreads exist even when market makers earn no extra profit: some traders are informed, so quotes must protect against them. Read it first. <a href="https://www.sciencedirect.com/science/article/pii/0304-405X(85)90044-3">Publisher page</a> (may need library access).</p>
+  </details>
+  <details open>
+    <summary>Avellaneda and Stoikov (2008), Quantitative Finance</summary>
+    <p>Sets up the market maker's problem as balancing inventory risk against the chance of getting filled, and derives the quotes we simulate. <a href="https://math.nyu.edu/~avellane/HighFrequencyTrading.pdf">Author's PDF</a>.</p>
+  </details>
+  <details open>
+    <summary>Brogaard, Hendershott and Riordan (2014), Review of Financial Studies</summary>
+    <p>An empirical look at what high-frequency traders actually do, based on NASDAQ data. Their findings on price discovery are the model for our real-data section. <a href="https://www.ecb.europa.eu/pub/pdf/scpwps/ecbwp1602.pdf">Free working-paper version</a>.</p>
+  </details>
+  </div>
+</section>
+
+<section id="roadmap">
+  <h2>Roadmap</h2>
+  <div class="tablewrap">
+  <table class="sched">
+    <tbody>
+      <tr><td>Done</td><td>Code scaffold, data loaders, microstructure metrics, simulation, tests</td></tr>
+      <tr><td>Next</td><td>Download and clean a week of BTCUSDT trades; first descriptive statistics</td></tr>
+      <tr><td>Then</td><td>Test how volatility, estimated spreads and trade imbalance relate</td></tr>
+      <tr><td>Then</td><td>Calibrate the simulation to real data instead of made-up parameters</td></tr>
+      <tr><td>Final</td><td>Write-up, figures, and a short talk</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section id="limits">
+  <h2>Limits you should know about</h2>
+  <ul class="plain">
+    <li>The simulation ignores queue position, network delay, trading fees and minimum price increments. Real high-frequency firms compete on exactly those things.</li>
+    <li>Trade-only data cannot give true quoted spreads. We will use an estimate and say so.</li>
+    <li>Crypto spot markets are not the US stock market. Findings describe market structure, not NASDAQ.</li>
+    <li>This is a student project. Treat it as a learning resource, not as financial advice.</li>
+  </ul>
+</section>
+
+<section id="follow">
+  <h2>Run it yourself</h2>
+  <p>You need Python 3.11 or newer. Everything here is free.</p>
+<pre>git clone {{REPO}}.git
+cd Finance
+python3.11 -m venv .venv &amp;&amp; source .venv/bin/activate
+pip install -r requirements.txt
+pytest                          # run the tests
+python scripts/run_simulation.py   # reproduce the numbers on this page
+python scripts/build_site.py       # rebuild this page</pre>
+  <p>Questions, corrections and ideas are welcome. Open an issue on <a href="{{REPO}}">GitHub</a>.</p>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>Built by Bruno Peric, a finance student at Utah Valley University. Independent student work, not affiliated with or endorsed by any employer or institution. Not financial advice.</p>
+  </div>
+</footer>
+
+</body>
+</html>
