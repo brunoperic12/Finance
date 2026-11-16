@@ -1,8 +1,12 @@
+.DS_Store
+node_modules/
+test-results/
+playwright-report/
+
 .venv/
 __pycache__/
 *.pyc
 .ipynb_checkpoints/
-.DS_Store
 .env
 
 # Data is large and re-downloadable: never commit it
