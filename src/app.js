@@ -90,6 +90,11 @@ function rate(value) {
   return `${Number(value).toFixed(2)}%`;
 }
 
+function proseRate(value) {
+  const rounded = Number(value).toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
+  return `${rounded}%`;
+}
+
 function signedRate(bp) {
   const text = `${(Math.abs(bp) / 100).toFixed(2)}%`;
   if (bp > 0) return `+${text}`;
@@ -142,6 +147,9 @@ function readInput() {
     customRate: customOn && Number.isFinite(custom) ? custom : null,
     closingCostRate: (parseNumber($("closing").value) || 0) / 100,
     cashLeftAfterClosing: reserves === "" ? null : parseNumber(reserves) || 0,
+    extraMonthlyPayment: Number.isFinite(parseNumber($("extra").value)) ? parseNumber($("extra").value) : 0,
+    appreciationRate: (parseNumber($("appreciation").value) || 0) / 100,
+    sellingCostRate: (parseNumber($("selling").value) || 0) / 100,
   };
 }
 
@@ -187,6 +195,7 @@ function renderErrors(errors) {
   out("payment-mobile").textContent = "—";
   out("rate-mobile").textContent = "";
   out("verdict-mobile").textContent = "Check inputs";
+  out("equity-section").hidden = true;
 }
 
 function renderResult(result) {
@@ -326,6 +335,13 @@ function renderResult(result) {
     paragraph.textContent = insight.text;
     insights.append(paragraph);
   }
+  if (result.equity?.breakEvenMonth != null) {
+    const paragraph = document.createElement("p");
+    paragraph.textContent = result.equity.breakEvenMonth === 0
+      ? "A sale today would return the down payment and buyer closing costs."
+      : `A sale covers the down payment and closing costs in ${futureMonth(result.equity.breakEvenMonth)}. The equity chart shows the path.`;
+    insights.append(paragraph);
+  }
 
   out("payment-mobile").textContent = money(result.monthly.total);
   out("rate-mobile").textContent = result.hasLoan ? rate(result.rate) : "Cash";
@@ -426,7 +442,10 @@ function renderChart(result) {
     chart.append(column);
   }
   const first = result.years[0];
-  out("chart-summary").textContent = `Each bar is one year of principal and interest. In year 1, ${money(first.interest, true)} is interest and ${money(first.principal, true)} is principal. Over ${result.termYears} years, interest totals ${money(result.totals.interest, true)}.`;
+  const extraNote = result.equity?.extraMonthly > 0
+    ? " Extra principal is not in these bars. It is included in the equity chart."
+    : "";
+  out("chart-summary").textContent = `Each bar is one year of the scheduled principal and interest. In year 1, ${money(first.interest, true)} is interest and ${money(first.principal, true)} is principal. Over ${result.termYears} years, scheduled interest totals ${money(result.totals.interest, true)}.${extraNote}`;
 
   const body = out("year-table");
   body.replaceChildren();
@@ -439,6 +458,153 @@ function renderChart(result) {
       cell(money(year.balance, true)),
     );
     body.append(row);
+  }
+}
+
+function futureMonth(offset) {
+  if (offset === 0) return "today";
+  const date = new Date();
+  date.setDate(1);
+  date.setMonth(date.getMonth() + offset);
+  return date.toLocaleString("en-US", { month: "long", year: "numeric" });
+}
+
+function spanLabel(months) {
+  const years = Math.floor(months / 12);
+  const rest = months % 12;
+  if (years === 0) return `${rest} month${rest === 1 ? "" : "s"}`;
+  if (rest === 0) return `${years} year${years === 1 ? "" : "s"}`;
+  return `${years} yr ${rest} mo`;
+}
+
+function axisMoney(value) {
+  const sign = value < 0 ? "−" : "";
+  const amount = Math.abs(value);
+  if (amount >= 1_000_000) return `${sign}$${(amount / 1_000_000).toFixed(1)}M`;
+  if (amount >= 10_000) return `${sign}$${Math.round(amount / 1000)}k`;
+  if (amount >= 1000) return `${sign}$${(amount / 1000).toFixed(1)}k`;
+  return `${sign}$${Math.round(amount)}`;
+}
+
+function svgEl(name, attrs) {
+  const node = document.createElementNS("http://www.w3.org/2000/svg", name);
+  for (const [key, value] of Object.entries(attrs)) node.setAttribute(key, value);
+  return node;
+}
+
+function renderEquity(result) {
+  const section = out("equity-section");
+  if (!result?.hasLoan || !result.equity) {
+    section.hidden = true;
+    return;
+  }
+  section.hidden = false;
+  const equity = result.equity;
+  const summary = out("equity-summary");
+  summary.replaceChildren();
+  const paragraphs = [];
+  if (equity.breakEvenMonth == null) {
+    paragraphs.push("At this appreciation rate, a sale does not return the down payment and closing costs before the scheduled end of the loan.");
+  } else if (equity.breakEvenMonth === 0) {
+    paragraphs.push(`A sale today would return the ${money(equity.cashInvested, true)} of down payment and closing costs. Equity if sold starts at ${money(equity.breakEvenEquity, true)}.`);
+  } else {
+    paragraphs.push(`You can sell and break even in ${futureMonth(equity.breakEvenMonth)}, about ${spanLabel(equity.breakEvenMonth)} in. The sale would clear about ${money(equity.breakEvenEquity, true)} after the loan and selling costs, which covers the ${money(equity.cashInvested, true)} you put in${equity.extraMonthly > 0 ? " plus extra principal paid by then" : ""}.`);
+  }
+  if (equity.positiveMonth != null && equity.positiveMonth > 0 && (equity.breakEvenMonth == null || equity.positiveMonth < equity.breakEvenMonth)) {
+    paragraphs.push(`A sale first covers the loan and the ${proseRate(equity.sellingCostRate * 100)} selling cost in ${futureMonth(equity.positiveMonth)}. That is the month equity if sold turns positive.`);
+  }
+  if (equity.extraMonthly > 0 && equity.payoffMonth != null) {
+    const sooner = equity.contractualMonths - equity.payoffMonth;
+    paragraphs.push(
+      `An extra ${money(equity.extraMonthly, Number.isInteger(equity.extraMonthly))} a month pays the loan off in ${spanLabel(equity.payoffMonth)}${sooner > 0 ? `, ${spanLabel(sooner)} sooner` : ""}, and cuts interest by ${money(equity.interestSaved, true)}. The required payment above stays the same.`,
+    );
+  }
+  if (equity.principalLeadMonth != null) {
+    paragraphs.push(
+      equity.principalLeadMonth <= 1
+        ? "Principal is already larger than interest, so each payment adds more to your stake than it costs in interest."
+        : `Principal passes interest in ${futureMonth(equity.principalLeadMonth)}. From that payment on, more of each payment becomes equity than interest.`,
+    );
+  }
+  paragraphs.push(`Home value in this chart grows at ${proseRate(equity.appreciationRate * 100)} a year. Equity if sold is that value, minus selling costs and the remaining balance.`);
+  for (const text of paragraphs) {
+    const paragraph = document.createElement("p");
+    paragraph.textContent = text;
+    summary.append(paragraph);
+  }
+
+  drawEquityChart(equity);
+  const body = out("equity-table");
+  body.replaceChildren();
+  for (const point of equity.points.filter((item) => item.month % 12 === 0 || item.month === equity.points.at(-1).month)) {
+    const row = document.createElement("tr");
+    row.append(
+      cell(String(Math.round(point.year))),
+      cell(money(point.value, true)),
+      cell(money(point.balance, true)),
+      cell(money(point.saleEquity, true)),
+    );
+    body.append(row);
+  }
+}
+
+function drawEquityChart(equity) {
+  const svg = out("equity-chart");
+  svg.replaceChildren();
+  const points = equity.points;
+  if (points.length < 2) return;
+  const width = 720;
+  const height = 300;
+  const pad = { left: 64, right: 16, top: 18, bottom: 32 };
+  const plotWidth = width - pad.left - pad.right;
+  const plotHeight = height - pad.top - pad.bottom;
+  const maxYear = points[points.length - 1].year || 1;
+  const lowest = Math.min(...points.map((point) => point.saleEquity), 0);
+  const highest = Math.max(...points.map((point) => point.value), 1);
+  const rough = Math.max(highest - Math.min(lowest, 0), 1) / 4;
+  const power = 10 ** Math.floor(Math.log10(rough));
+  const fraction = rough / power;
+  const nice = fraction <= 1 ? 1 : fraction <= 2 ? 2 : fraction <= 5 ? 5 : 10;
+  const step = nice * power;
+  const min = Math.min(0, Math.floor(lowest / step) * step);
+  const max = Math.max(step, Math.ceil(highest / step) * step);
+  const xOf = (year) => pad.left + (year / maxYear) * plotWidth;
+  const yOf = (value) => pad.top + (1 - (value - min) / (max - min)) * plotHeight;
+
+  for (let value = min; value <= max + step / 10; value += step) {
+    const y = yOf(value);
+    svg.append(svgEl("line", { class: "grid", x1: pad.left, x2: width - pad.right, y1: y, y2: y }));
+    const label = svgEl("text", { x: pad.left - 8, y: y + 4, "text-anchor": "end" });
+    label.textContent = axisMoney(value);
+    svg.append(label);
+  }
+  if (min < 0 && max > 0) {
+    svg.append(svgEl("line", { class: "zero", x1: pad.left, x2: width - pad.right, y1: yOf(0), y2: yOf(0) }));
+  }
+  const pathFor = (key) => points.map((point, index) => `${index === 0 ? "M" : "L"}${xOf(point.year).toFixed(1)},${yOf(point[key]).toFixed(1)}`).join(" ");
+  svg.append(svgEl("path", { class: "line-value", d: pathFor("value") }));
+  svg.append(svgEl("path", { class: "line-balance", d: pathFor("balance") }));
+  svg.append(svgEl("path", { class: "line-equity", d: pathFor("saleEquity") }));
+
+  const yearMarks = maxYear >= 10 ? [0, maxYear / 2, maxYear] : [0, maxYear];
+  for (const year of yearMarks) {
+    const anchor = year === 0 ? "start" : year === maxYear ? "end" : "middle";
+    const label = svgEl("text", { x: xOf(year), y: height - 10, "text-anchor": anchor });
+    label.textContent = `Year ${Math.round(year)}`;
+    svg.append(label);
+  }
+
+  if (equity.breakEvenMonth != null) {
+    const x = xOf(equity.breakEvenMonth / 12);
+    svg.append(svgEl("line", { class: "marker", x1: x, x2: x, y1: pad.top, y2: height - pad.bottom }));
+    const label = svgEl("text", {
+      class: "marker-label",
+      x: x + (x > pad.left + plotWidth * 0.72 ? -8 : 8),
+      y: pad.top + 14,
+      "text-anchor": x > pad.left + plotWidth * 0.72 ? "end" : "start",
+    });
+    label.textContent = "Break-even";
+    svg.append(label);
   }
 }
 
@@ -498,6 +664,7 @@ function render() {
   renderResult(result);
   renderComparisons(input);
   renderChart(result);
+  renderEquity(result);
 }
 
 function clearProfiles() {
@@ -528,6 +695,9 @@ function applyProfile(id) {
   setChecked("vaUse", "first");
   $("finance-fee").checked = true;
   $("custom-toggle").checked = false;
+  $("extra").value = "0";
+  $("appreciation").value = "3";
+  $("selling").value = "6";
   $("closing").value = "2.5";
   $("reserves").value = "";
   clearProfiles();
@@ -563,7 +733,7 @@ function populate() {
     `The starting rate is the ${BENCHMARK.source} for ${BENCHMARK.asOf}: ${rate(BENCHMARK.year30)} on a 30-year fixed and ${rate(BENCHMARK.year15)} on a 15-year fixed. A 20-year term sits between them. A 10-year term is 0.20 points under the 15-year average.`,
     "The survey is a national average of real applications. This model treats a 740–759 credit score, 20% down, a primary residence, and a conforming loan as zero, then moves the rate for credit, loan-to-value, occupancy, debt-to-income, jumbo size, and program. Those steps are a screening sketch. They are not a lender rate sheet and they are not Fannie Mae loan-level price adjustments.",
     `Conventional mortgage insurance follows a published 2026 borrower-paid monthly grid by credit score and loan-to-value for fixed terms over 20 years. Shorter terms often cost less. FHA uses a 1.75% upfront premium plus the annual schedule, with the higher tier above the ${money(CONFORMING_LIMIT, true)} conforming limit. VA uses the standard purchase funding-fee schedule. USDA uses a 1% upfront guarantee fee and a 0.35% annual fee.`,
-    "Property-tax choices are rounded statewide approximations. The payment includes principal and interest, mortgage insurance, tax, homeowners insurance, and HOA. It leaves out discount points, a specific county loan limit, and a lender credit decision.",
+    "Property-tax choices are rounded statewide approximations. The payment includes principal and interest, mortgage insurance, tax, homeowners insurance, and HOA. Extra principal is optional and is not part of that required payment. Equity if sold grows the price at the appreciation rate you enter, subtracts selling costs, and subtracts the remaining loan. Break-even means those proceeds cover the down payment, buyer closing costs, and extra principal paid so far. The estimate leaves out discount points, repairs, taxes on a gain, a specific county loan limit, and a lender credit decision.",
   ];
   for (const text of paragraphs) {
     const paragraph = document.createElement("p");
@@ -582,7 +752,7 @@ function populate() {
 
 function bind() {
   $("worksheet").addEventListener("submit", (event) => event.preventDefault());
-  for (const id of ["income", "debts", "price", "down", "insurance", "hoa", "reserves"]) bindMoney(id);
+  for (const id of ["income", "debts", "price", "down", "insurance", "hoa", "reserves", "extra"]) bindMoney(id);
 
   $("credit").addEventListener("input", () => {
     const score = parseNumber($("credit").value);

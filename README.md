@@ -25,4 +25,6 @@ The monthly number is principal and interest, plus:
 
 The 2026 baseline conforming limit used here is **$832,750**.
 
+An optional extra principal payment shortens the loan. The equity chart shows the home value, the remaining balance, and what a sale would leave after selling costs. Break-even is the month those proceeds cover the down payment and buyer closing costs.
+
 This is a screening estimate, not a Loan Estimate, a credit decision, or an offer to lend. The in-app note “How the rate is estimated” lists the assumptions.

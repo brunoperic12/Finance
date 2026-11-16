@@ -477,6 +477,71 @@ describe("estimateScenario", () => {
   });
 });
 
+describe("extra payments and equity", () => {
+  const flat = {
+    ...quiet,
+    creditScore: 740,
+    purchasePrice: 100_000,
+    downPayment: 0,
+    termYears: 10,
+    program: "conventional",
+    customRate: 0,
+    closingCostRate: 0.02,
+    appreciationRate: 0,
+    sellingCostRate: 0.1,
+    extraMonthlyPayment: 0,
+  };
+
+  it("shows when a flat-price sale covers costs, then the cash you put in", () => {
+    const result = estimateScenario(flat);
+    assert.equal(result.equity.positiveMonth, 12);
+    assert.equal(result.equity.breakEvenMonth, 15);
+    assert.equal(result.equity.cashInvested, 2_000);
+    assert.equal(result.equity.principalLeadMonth, 1);
+    assert.ok(result.equity.points[0].saleEquity < 0);
+    assert.equal(result.monthly.principalAndInterest, 833.33);
+  });
+
+  it("keeps the required payment unchanged when extra principal is added", () => {
+    const base = estimateScenario(flat);
+    const extra = estimateScenario({ ...flat, extraMonthlyPayment: 500 });
+    assert.equal(extra.monthly.principalAndInterest, base.monthly.principalAndInterest);
+    assert.ok(extra.equity.payoffMonth < base.equity.payoffMonth);
+    assert.ok(extra.equity.positiveMonth < base.equity.positiveMonth);
+    assert.equal(extra.equity.interestSaved, 0);
+  });
+
+  it("saves interest and reaches break-even sooner when the rate is above zero", () => {
+    const shared = {
+      ...quiet,
+      creditScore: 740,
+      purchasePrice: 400_000,
+      downPayment: 80_000,
+      termYears: 30,
+      program: "conventional",
+      customRate: 6,
+      closingCostRate: 0,
+      appreciationRate: 0,
+      sellingCostRate: 0.06,
+    };
+    const base = estimateScenario({ ...shared, extraMonthlyPayment: 0 });
+    const extra = estimateScenario({ ...shared, extraMonthlyPayment: 500 });
+    assert.ok(Math.abs(base.equity.interest - base.totals.interest) < 2);
+    assert.ok(extra.equity.interestSaved > 1000);
+    assert.ok(extra.equity.payoffMonth < base.equity.contractualMonths - 12);
+    assert.ok(extra.equity.breakEvenMonth < base.equity.breakEvenMonth);
+    for (const point of extra.equity.points) {
+      const rebuilt = point.value * (1 - shared.sellingCostRate) - point.balance;
+      assert.ok(Math.abs(rebuilt - point.saleEquity) < 0.05);
+    }
+  });
+
+  it("rejects a negative extra payment", () => {
+    const result = estimateScenario({ ...flat, extraMonthlyPayment: -10 });
+    assert.equal(result.ok, false);
+  });
+});
+
 describe("state tax presets", () => {
   it("includes a national preset and the states", () => {
     const codes = STATE_TAX_RATES.map((state) => state.code);

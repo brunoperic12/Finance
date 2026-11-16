@@ -139,6 +139,21 @@
               <input id="finance-fee" type="checkbox" checked>
               <span>Finance the upfront mortgage insurance or funding fee into the loan</span>
             </label>
+            <label class="field" for="extra">
+              <span>Extra principal / month</span>
+              <span class="affix"><span aria-hidden="true">$</span><input id="extra" inputmode="decimal" value="0" aria-describedby="extra-hint"></span>
+              <span id="extra-hint" class="hint">Optional. Paid on top of the required mortgage payment.</span>
+            </label>
+            <label class="field" for="appreciation">
+              <span>Home appreciation / year</span>
+              <span class="affix suffix"><input id="appreciation" inputmode="decimal" value="3" aria-describedby="appreciation-hint"><span aria-hidden="true">%</span></span>
+              <span id="appreciation-hint" class="hint">A long-run guess. Prices can also fall.</span>
+            </label>
+            <label class="field" for="selling">
+              <span>Cost to sell</span>
+              <span class="affix suffix"><input id="selling" inputmode="decimal" value="6" aria-describedby="selling-hint"><span aria-hidden="true">%</span></span>
+              <span id="selling-hint" class="hint">Agent commission and seller closing costs, taken from the sale price.</span>
+            </label>
             <label class="check wide">
               <input id="custom-toggle" type="checkbox">
               <span>Type a rate instead of the estimate</span>
@@ -246,6 +261,33 @@
               </tr>
             </thead>
             <tbody data-out="year-table"></tbody>
+          </table>
+        </div>
+      </details>
+    </section>
+
+    <section class="equity-section" data-out="equity-section" hidden>
+      <h2>Equity if you sold</h2>
+      <div id="equity-summary" data-out="equity-summary"></div>
+      <svg class="equity-chart" data-out="equity-chart" role="img" aria-labelledby="equity-summary" viewBox="0 0 720 300"></svg>
+      <div class="chart-key">
+        <span><i class="swatch value"></i> Home value</span>
+        <span><i class="swatch balance"></i> Loan balance</span>
+        <span><i class="swatch equity"></i> Equity if sold</span>
+      </div>
+      <details>
+        <summary>Equity by year</summary>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Year</th>
+                <th scope="col">Home value</th>
+                <th scope="col">Loan balance</th>
+                <th scope="col">Equity if sold</th>
+              </tr>
+            </thead>
+            <tbody data-out="equity-table"></tbody>
           </table>
         </div>
       </details>

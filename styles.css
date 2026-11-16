@@ -394,6 +394,34 @@ summary { cursor: pointer; color: var(--muted); }
 
 .swatch.interest { background: var(--interest); }
 .swatch.principal { background: var(--principal); }
+.swatch.value { background: var(--muted); }
+.swatch.balance { background: var(--interest); }
+.swatch.equity { background: var(--accent); }
+
+.equity-section { margin-top: 28px; }
+
+.equity-chart {
+  width: 100%;
+  height: auto;
+  display: block;
+  margin-top: 12px;
+}
+
+.equity-chart text {
+  fill: var(--muted);
+  font-size: 12px;
+  font-family: inherit;
+}
+
+.equity-chart .grid { stroke: var(--line); stroke-width: 1; }
+.equity-chart .zero { stroke: var(--line-strong); stroke-width: 1; }
+.equity-chart .line-value { fill: none; stroke: var(--muted); stroke-width: 2; }
+.equity-chart .line-balance { fill: none; stroke: var(--interest); stroke-width: 2; }
+.equity-chart .line-equity { fill: none; stroke: var(--accent); stroke-width: 2.5; }
+.equity-chart .marker { stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 3 3; }
+.equity-chart .marker-label { fill: var(--accent); font-size: 12px; font-weight: 600; }
+
+.equity-summary p { margin: 0 0 8px; }
 
 .receipt { display: grid; row-gap: 6px; }
 

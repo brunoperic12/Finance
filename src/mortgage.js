@@ -106,6 +106,9 @@ export const DEFAULTS = {
   customRate: null,
   closingCostRate: 0.025,
   cashLeftAfterClosing: null,
+  extraMonthlyPayment: 0,
+  appreciationRate: 0.03,
+  sellingCostRate: 0.06,
 };
 
 export function roundCents(value) {
@@ -364,6 +367,92 @@ function buildSchedule(loan, annualRatePercent, termYears, price) {
     totalPrincipal: roundCents(totalPrincipal),
     cancelMonth,
     firstMonth: firstMonth ?? { interest: 0, principal: 0 },
+  };
+}
+
+/**
+ * Equity if the home were sold. Extra principal shortens the loan.
+ * Break-even is the first month sale proceeds cover the down payment,
+ * buyer closing costs, and any extra principal paid by then.
+ */
+function projectEquity({
+  loanAmount,
+  annualRatePercent,
+  termYears,
+  price,
+  extraMonthly,
+  appreciationRate,
+  sellingCostRate,
+  cashInvested,
+  scheduledInterest,
+}) {
+  const termMonths = Math.max(1, Math.round(termYears * 12));
+  const monthlyRate = annualRatePercent / 100 / 12;
+  const scheduledPayment = monthlyPrincipalAndInterest(loanAmount, annualRatePercent, termYears);
+  const extra = Math.max(0, extraMonthly);
+  let balance = loanAmount;
+  let totalInterest = 0;
+  let totalExtra = 0;
+  let payoffMonth = loanAmount > 0.004 ? null : 0;
+  let positiveMonth = null;
+  let breakEvenMonth = null;
+  let breakEvenEquity = null;
+  let principalLeadMonth = null;
+  const points = [];
+  const seen = new Set();
+
+  function snapshot(month) {
+    const value = price * (1 + appreciationRate) ** (month / 12);
+    const saleEquity = value * (1 - sellingCostRate) - balance;
+    const cashOut = cashInvested + totalExtra;
+    if (positiveMonth == null && saleEquity >= -0.005) positiveMonth = month;
+    if (breakEvenMonth == null && saleEquity + 0.005 >= cashOut) {
+      breakEvenMonth = month;
+      breakEvenEquity = saleEquity;
+    }
+    if (!seen.has(month)) {
+      seen.add(month);
+      points.push({
+        month,
+        year: month / 12,
+        value: roundCents(value),
+        balance: roundCents(Math.max(0, balance)),
+        saleEquity: roundCents(saleEquity),
+        cashOut: roundCents(cashOut),
+      });
+    }
+  }
+
+  snapshot(0);
+  for (let month = 1; month <= termMonths; month += 1) {
+    if (balance > 0.004) {
+      const interest = balance * monthlyRate;
+      const scheduledPrincipal = Math.max(0, scheduledPayment - interest);
+      let principal = scheduledPrincipal + extra;
+      if (principal > balance) principal = balance;
+      if (principalLeadMonth == null && principal > interest + 0.005) principalLeadMonth = month;
+      totalExtra += Math.max(0, principal - Math.min(scheduledPrincipal, balance));
+      balance = Math.max(0, balance - principal);
+      totalInterest += interest;
+      if (payoffMonth == null && balance <= 0.01) payoffMonth = month;
+    }
+    snapshot(month);
+  }
+
+  return {
+    extraMonthly: roundCents(extra),
+    appreciationRate,
+    sellingCostRate,
+    cashInvested: roundCents(cashInvested),
+    payoffMonth,
+    contractualMonths: termMonths,
+    interest: roundCents(totalInterest),
+    interestSaved: roundCents(Math.max(0, scheduledInterest - totalInterest)),
+    positiveMonth,
+    breakEvenMonth,
+    breakEvenEquity: breakEvenEquity == null ? null : roundCents(breakEvenEquity),
+    principalLeadMonth,
+    points,
   };
 }
 
@@ -656,6 +745,9 @@ export function estimateScenario(raw = {}) {
   const annualInsurance = Number(input.annualInsurance);
   const monthlyHoa = Number(input.monthlyHoa);
   const closingCostRate = Number(input.closingCostRate);
+  const extraMonthlyPayment = Number(input.extraMonthlyPayment);
+  const appreciationRate = Number(input.appreciationRate);
+  const sellingCostRate = Number(input.sellingCostRate);
 
   if (!(price > 0)) errors.push("Enter a purchase price.");
   else if (price > 100_000_000) errors.push("Enter a purchase price under $100 million.");
@@ -678,6 +770,15 @@ export function estimateScenario(raw = {}) {
   if (input.customRate != null) {
     const custom = Number(input.customRate);
     if (!(custom >= 0 && custom <= 25)) errors.push("A typed rate needs to be between 0% and 25%.");
+  }
+  if (!(extraMonthlyPayment >= 0 && extraMonthlyPayment <= 1_000_000)) {
+    errors.push("Extra principal needs to be between $0 and $1,000,000 a month.");
+  }
+  if (!(appreciationRate >= -0.1 && appreciationRate <= 0.15)) {
+    errors.push("Home appreciation needs to be between -10% and 15% a year.");
+  }
+  if (!(sellingCostRate >= 0 && sellingCostRate <= 0.15)) {
+    errors.push("Selling costs need to be between 0% and 15%.");
   }
   if (errors.length) return { ok: false, errors };
 
@@ -878,6 +979,19 @@ export function estimateScenario(raw = {}) {
       months: Math.round(termYears * 12),
     },
     years: schedule.years,
+    equity: loanAmount > 0
+      ? projectEquity({
+          loanAmount,
+          annualRatePercent: rate,
+          termYears,
+          price: priceCents / 100,
+          extraMonthly: extraMonthlyPayment,
+          appreciationRate,
+          sellingCostRate,
+          cashInvested: (downCents + closingCents + upfrontCashCents) / 100,
+          scheduledInterest: schedule.totalInterest,
+        })
+      : null,
     screening,
     insights: buildInsights({
       program: input.program,
