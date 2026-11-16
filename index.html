@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mortgage screener</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%231f4a38'/%3E%3C/svg%3E">
+  <meta name="description" content="Estimate a mortgage rate from credit, income, debts, and down payment, then see the monthly payment.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,560;9..144,640&family=Outfit:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <a class="skip" href="#results">Skip to payment</a>
+  <div class="page">
+    <header class="masthead">
+      <div>
+        <p class="kicker">Purchase worksheet</p>
+        <h1>Mortgage screener</h1>
+        <p class="lede">Credit, income, debts, and down payment set a rate. Price and term turn that rate into a monthly payment.</p>
+      </div>
+      <p class="benchmark" data-out="benchmark"></p>
+    </header>
+
+    <div class="profiles" role="group" aria-label="Example profiles">
+      <button type="button" data-profile="mid">720 score · 10% down</button>
+      <button type="button" data-profile="strong">760 score · 20% down</button>
+      <button type="button" data-profile="fha">660 score · FHA</button>
+    </div>
+
+    <div class="layout">
+      <form id="worksheet" class="worksheet" autocomplete="off">
+        <fieldset>
+          <legend>Borrower</legend>
+          <div class="fields">
+            <label class="field wide" for="credit">
+              <span>Credit score</span>
+              <span class="credit-row">
+                <input id="credit-range" type="range" min="300" max="850" step="1" value="720" aria-label="Credit score slider">
+                <input id="credit" inputmode="numeric" value="720" aria-describedby="credit-caption">
+              </span>
+              <span id="credit-caption" class="hint"></span>
+            </label>
+            <label class="field" for="income">
+              <span>Gross annual income</span>
+              <span class="affix"><span aria-hidden="true">$</span><input id="income" inputmode="decimal" value="120000" aria-describedby="income-hint"></span>
+              <span id="income-hint" class="hint">Household income before taxes.</span>
+            </label>
+            <label class="field" for="debts">
+              <span>Monthly debt payments</span>
+              <span class="affix"><span aria-hidden="true">$</span><input id="debts" inputmode="decimal" value="650" aria-describedby="debts-hint"></span>
+              <span id="debts-hint" class="hint">Cars, student loans, card minimums. Leave out rent and this mortgage.</span>
+            </label>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Property</legend>
+          <div class="fields">
+            <label class="field" for="price">
+              <span>Purchase price</span>
+              <span class="affix"><span aria-hidden="true">$</span><input id="price" inputmode="decimal" value="450000"></span>
+            </label>
+            <label class="field" for="down">
+              <span>Down payment</span>
+              <span class="split">
+                <span class="affix"><span aria-hidden="true">$</span><input id="down" inputmode="decimal" value="45000" aria-describedby="down-meta"></span>
+                <span class="affix suffix"><input id="down-pct" inputmode="decimal" value="10" aria-label="Down payment percent"><span aria-hidden="true">%</span></span>
+              </span>
+            </label>
+            <p id="down-meta" class="hint wide"></p>
+            <div class="chips wide" role="group" aria-label="Down payment presets">
+              <button type="button" data-down="0">0%</button>
+              <button type="button" data-down="0.035">3.5%</button>
+              <button type="button" data-down="0.05">5%</button>
+              <button type="button" data-down="0.1">10%</button>
+              <button type="button" data-down="0.2">20%</button>
+            </div>
+            <label class="field" for="occupancy">
+              <span>How you’ll use it</span>
+              <select id="occupancy">
+                <option value="primary">Primary residence</option>
+                <option value="second">Second home</option>
+                <option value="investment">Investment property</option>
+              </select>
+            </label>
+            <label class="field" for="state">
+              <span>Property tax preset</span>
+              <select id="state"></select>
+            </label>
+            <label class="field" for="tax">
+              <span>Property tax rate</span>
+              <span class="affix suffix"><input id="tax" inputmode="decimal" value="1.10" aria-describedby="tax-hint"><span aria-hidden="true">%</span></span>
+              <span id="tax-hint" class="hint">Of the price, per year. Edit it to match the home.</span>
+            </label>
+            <label class="field" for="insurance">
+              <span>Homeowners insurance / year</span>
+              <span class="affix"><span aria-hidden="true">$</span><input id="insurance" inputmode="decimal" value="1575" aria-describedby="insurance-hint"></span>
+              <span id="insurance-hint" class="hint">A rough start is 0.35% of the price. Storm states run higher.</span>
+            </label>
+            <label class="field" for="hoa">
+              <span>HOA dues / month</span>
+              <span class="affix"><span aria-hidden="true">$</span><input id="hoa" inputmode="decimal" value="0"></span>
+            </label>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Loan</legend>
+          <div class="fields">
+            <div class="field wide">
+              <span class="label" id="term-label">Term</span>
+              <div class="segment" role="radiogroup" aria-labelledby="term-label">
+                <label><input type="radio" name="term" value="10"><span>10 yr</span></label>
+                <label><input type="radio" name="term" value="15"><span>15 yr</span></label>
+                <label><input type="radio" name="term" value="20"><span>20 yr</span></label>
+                <label><input type="radio" name="term" value="30" checked><span>30 yr</span></label>
+              </div>
+            </div>
+            <div class="field wide">
+              <span class="label" id="program-label">Program</span>
+              <div class="segment programs" role="radiogroup" aria-labelledby="program-label">
+                <label><input type="radio" name="program" value="conventional" checked><span>Conventional</span></label>
+                <label><input type="radio" name="program" value="fha"><span>FHA</span></label>
+                <label><input type="radio" name="program" value="va"><span>VA</span></label>
+                <label><input type="radio" name="program" value="usda"><span>USDA</span></label>
+              </div>
+            </div>
+            <fieldset class="subfield wide" id="va-options" hidden>
+              <legend>VA funding fee</legend>
+              <div class="segment" role="radiogroup" aria-label="VA funding fee">
+                <label><input type="radio" name="vaUse" value="first" checked><span>First use</span></label>
+                <label><input type="radio" name="vaUse" value="subsequent"><span>Later use</span></label>
+                <label><input type="radio" name="vaUse" value="exempt"><span>Exempt</span></label>
+              </div>
+            </fieldset>
+            <label class="check wide" id="finance-option" hidden>
+              <input id="finance-fee" type="checkbox" checked>
+              <span>Finance the upfront mortgage insurance or funding fee into the loan</span>
+            </label>
+            <label class="check wide">
+              <input id="custom-toggle" type="checkbox">
+              <span>Type a rate instead of the estimate</span>
+            </label>
+            <label class="field" id="custom-wrap" for="custom-rate" hidden>
+              <span>Your rate</span>
+              <span class="affix suffix"><input id="custom-rate" inputmode="decimal" value="7.00"><span aria-hidden="true">%</span></span>
+            </label>
+          </div>
+          <details class="assumptions">
+            <summary>Cash to close and reserves</summary>
+            <div class="fields">
+              <label class="field" for="closing">
+                <span>Closing costs</span>
+                <span class="affix suffix"><input id="closing" inputmode="decimal" value="2.5" aria-describedby="closing-hint"><span aria-hidden="true">%</span></span>
+                <span id="closing-hint" class="hint">Percent of the base loan. Excludes discount points.</span>
+              </label>
+              <label class="field" for="reserves">
+                <span>Cash left after closing</span>
+                <span class="affix"><span aria-hidden="true">$</span><input id="reserves" inputmode="decimal" placeholder="Optional" aria-describedby="reserves-hint"></span>
+                <span id="reserves-hint" class="hint">Savings that remain after the down payment and costs.</span>
+              </label>
+            </div>
+          </details>
+        </fieldset>
+      </form>
+
+      <aside id="results" class="results" aria-live="polite">
+        <p class="verdict" data-tone="likely"><span data-out="verdict">Likely to qualify</span></p>
+        <p class="payment" data-out="payment">—</p>
+        <p class="per">per month, all in</p>
+        <p class="rate-line" data-out="rate-line"></p>
+        <div class="mix" data-out="mix"></div>
+        <ul class="mix-legend" data-out="mix-legend"></ul>
+        <div class="receipt" data-out="breakdown"></div>
+        <p class="fine" data-out="first-month"></p>
+        <div class="insights" data-out="insights"></div>
+        <h2>Rate</h2>
+        <div class="receipt" data-out="rate-build"></div>
+        <p class="fine" data-out="rate-note"></p>
+        <h2>Ratios</h2>
+        <div class="stats" data-out="ratios"></div>
+        <h2>Cash to close</h2>
+        <div class="receipt" data-out="cash"></div>
+        <p class="fine" data-out="fee-note"></p>
+        <ul class="reasons" data-out="reasons"></ul>
+      </aside>
+    </div>
+
+    <section class="comparisons" aria-label="Comparisons">
+      <div>
+        <h2>Same profile, other terms</h2>
+        <p class="fine">Monthly payment uses each term’s own estimated rate.</p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Term</th>
+                <th scope="col">Rate</th>
+                <th scope="col">Monthly</th>
+                <th scope="col">Total interest</th>
+              </tr>
+            </thead>
+            <tbody data-out="term-table"></tbody>
+          </table>
+        </div>
+      </div>
+      <div>
+        <h2>Same term, other programs</h2>
+        <p class="fine">VA and USDA assume you meet their eligibility rules.</p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Program</th>
+                <th scope="col">Rate</th>
+                <th scope="col">Monthly</th>
+                <th scope="col">Screen</th>
+              </tr>
+            </thead>
+            <tbody data-out="program-table"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="chart-section" data-out="chart-section">
+      <h2>Where principal and interest go</h2>
+      <p class="fine" data-out="chart-summary"></p>
+      <div class="chart" data-out="chart" aria-hidden="true"></div>
+      <div class="chart-key">
+        <span><i class="swatch interest"></i> Interest</span>
+        <span><i class="swatch principal"></i> Principal</span>
+      </div>
+      <details>
+        <summary>Year-by-year numbers</summary>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Year</th>
+                <th scope="col">Principal</th>
+                <th scope="col">Interest</th>
+                <th scope="col">Balance</th>
+              </tr>
+            </thead>
+            <tbody data-out="year-table"></tbody>
+          </table>
+        </div>
+      </details>
+    </section>
+
+    <footer class="colophon">
+      <p>This is a screening estimate, not a Loan Estimate, a credit decision, or an offer to lend. Taxes, insurance, and lender pricing will differ.</p>
+      <details>
+        <summary>How the rate is estimated</summary>
+        <div data-out="method"></div>
+      </details>
+    </footer>
+  </div>
+
+  <div class="mobile-bar">
+    <div>
+      <strong data-out="payment-mobile">—</strong>
+      <span data-out="rate-mobile"></span>
+    </div>
+    <span class="verdict" data-out="verdict-mobile"></span>
+  </div>
+  <noscript><p class="noscript">Turn on JavaScript to use the mortgage screener.</p></noscript>
+  <script type="module" src="./src/app.js"></script>
+</body>
+</html>
