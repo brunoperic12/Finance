@@ -122,7 +122,8 @@ footer { margin-top: 64px; padding: 30px 0 60px; border-top: 1px solid var(--rul
   <div class="wrap">
     <a href="#basics">The basics</a>
     <a href="#project">The project</a>
-    <a href="#results">Results</a>
+    <a href="#results">Simulation</a>
+    <a href="#real">Real trades</a>
     <a href="#reading">Reading list</a>
     <a href="#roadmap">Roadmap</a>
     <a href="#limits">Limits</a>
@@ -146,15 +147,15 @@ footer { margin-top: 64px; padding: 30px 0 60px; border-top: 1px solid var(--rul
 </section>
 
 <section id="project">
-  <span class="status warn">Status: simulation done, real-market data analysis next</span>
+  <span class="status warn">Status: simulation done, first week of real trades analyzed</span>
   <h2>What this project does</h2>
   <p>Two parts, built in the open so anyone can check the work.</p>
   <ol class="steps">
     <li><strong>A simulation (finished).</strong> We implemented the classic market-making model from Avellaneda and Stoikov (2008) and compared it with a naive quoter.</li>
-    <li><strong>A study of real trades (next).</strong> We will measure volatility, estimated spreads and buy/sell pressure using free public Binance data, and test whether they move together the way theory predicts.</li>
+    <li><strong>A study of real trades (started).</strong> We measure volatility, estimated spreads and buy/sell pressure using free public Binance data, and test whether they move together the way theory predicts. A first week of data is analyzed below, with mixed results.</li>
   </ol>
   <div class="callout">
-    <p><strong>What this page does not claim.</strong> Everything below comes from a simulation with made-up price paths. It shows how the model behaves. It does not show that anyone could profit from it in a real market.</p>
+    <p><strong>What this page does not claim.</strong> The simulation results come from made-up price paths. They show how the model behaves, not that anyone could profit from it in a real market. The real-trade results are a first look at one week of one coin.</p>
   </div>
 </section>
 
@@ -203,6 +204,47 @@ footer { margin-top: 64px; padding: 30px 0 60px; border-top: 1px solid var(--rul
   <p style="margin-top:14px;color:var(--muted);font-size:14px">Settings for the main comparison: gamma = {{GAMMA}}, price volatility = {{SIGMA}}, order-book decay k = {{K}}, base arrival rate A = {{AA}}. The sweep uses 400 sessions per row. All runs use fixed random seeds, so you can reproduce every number (see the bottom of the page).</p>
 </section>
 
+<section id="real">
+  <h2>A first look at real trades</h2>
+  <p>We downloaded every BTC/USDT trade on Binance for seven days, 1 to 7 March 2024. That is {{TRADES_TOTAL}} trades. It was a lively week: over those days the price ranged from about $59,000 to $69,000.</p>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Day (March)</th><th>Trades</th><th>Volume (BTC)</th><th>Price range (USD)</th></tr></thead>
+    <tbody>{{DAILY}}</tbody>
+  </table>
+  </div>
+
+  <h3>1. The market has a daily rhythm</h3>
+  <p>We measured how much the price jumps around within each minute (realized volatility, in basis points, where 100 bps is 1%). Volatility is mostly highest from 14:00 to 21:00 UTC, which covers the US trading day, and generally lower at other times.</p>
+  <figure>
+    <div class="legend" aria-hidden="true">
+      <span><i style="background:var(--accent)"></i>14:00 to 20:59 UTC</span>
+      <span><i style="background:var(--sym)"></i>Other hours</span>
+    </div>
+    {{TOD}}
+    <figcaption>Average volatility per minute, by hour of day. It peaks at {{PEAK_BPS}} bps around {{PEAK_HR}} UTC and bottoms out at {{QUIET_BPS}} bps around {{QUIET_HR}} UTC, a ratio of {{VOL_RATIO}} to 1. Seven days is a short sample, so treat the exact hours as approximate.</figcaption>
+  </figure>
+
+  <h3>2. Buying and price move together</h3>
+  <p>For each minute we computed buy pressure: buy volume minus sell volume, divided by total volume, where a buy means the buyer was the one who started the trade. In the same minute, buy pressure and price change have a correlation of {{SAME_CORR}}. That is strong, but it is partly built in: buyers who start trades push the price up as they trade.</p>
+
+  <h3>3. Does buy pressure predict the next minute? Not clearly.</h3>
+  <p>The more interesting question is whether this minute's buy pressure helps predict the next minute's price change. We sorted {{N_MIN}} minutes into five equal groups by buy pressure.</p>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Group (1 = most selling, 5 = most buying)</th><th>Average buy pressure</th><th>Next-minute price change (bps)</th></tr></thead>
+    <tbody>{{QUINT}}</tbody>
+  </table>
+  </div>
+  <p style="margin-top:14px">The two most buying-heavy groups are followed by small gains, but the pattern is not steady across groups. The correlation with the next minute is {{NEXT_CORR}}, and the statistical test gives {{T_STAT}}, below the usual cutoff of about 2. <strong>With this week of data we cannot say buy pressure predicts the next minute.</strong> We also cannot rule it out, because a week is short and the effect, if real, is small.</p>
+
+  <h3>4. Estimating the spread from trades did not work well</h3>
+  <p>Without quote data, the standard shortcut is the Roll (1984) estimator, which infers the spread from how trade prices bounce. On this data the estimator had no valid answer in {{ROLL_UNDEF}}% of hours, because trade prices tended to keep moving in one direction instead of bouncing. In the {{H1_N}} hours where it worked, hours with higher volatility had higher estimated spreads (rank correlation {{H1_RHO}}), which matches theory. But those hours are a selected subset, and the estimates probably mix in price impact from large orders. We do not treat them as measured spreads.</p>
+  <div class="callout">
+    <p><strong>What we learned.</strong> Trade data alone is not enough to study spreads. The next step is data with bids and asks, such as order book snapshots, so we can measure the spread directly instead of guessing it.</p>
+  </div>
+</section>
+
 <section id="reading">
   <h2>Reading list</h2>
   <p>Three papers anchor the project. We link to where each can be read and summarize each in our own words.</p>
@@ -228,8 +270,9 @@ footer { margin-top: 64px; padding: 30px 0 60px; border-top: 1px solid var(--rul
   <table class="sched">
     <tbody>
       <tr><td>Done</td><td>Code scaffold, data loaders, microstructure metrics, simulation, tests</td></tr>
-      <tr><td>Next</td><td>Download and clean a week of BTCUSDT trades; first descriptive statistics</td></tr>
-      <tr><td>Then</td><td>Test how volatility, estimated spreads and trade imbalance relate</td></tr>
+      <tr><td>Done</td><td>One week of BTC/USDT trades downloaded and analyzed (volatility, buy pressure, Roll spread estimate)</td></tr>
+      <tr><td>Next</td><td>Find order book or quote data so spreads can be measured directly</td></tr>
+      <tr><td>Then</td><td>Repeat the tests over a longer period, including a calm week for comparison</td></tr>
       <tr><td>Then</td><td>Calibrate the simulation to real data instead of made-up parameters</td></tr>
       <tr><td>Final</td><td>Write-up, figures, and a short talk</td></tr>
     </tbody>

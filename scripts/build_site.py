@@ -58,6 +58,64 @@ def sweep_rows() -> str:
     return "".join(rows)
 
 
+
+AN = json.loads((ROOT / "docs" / "analysis_results.json").read_text())
+
+
+def tod_svg() -> str:
+    rows = AN["time_of_day"]
+    w, h, pl, pr, pt, pb = 720, 280, 46, 12, 14, 44
+    iw, ih = w - pl - pr, h - pt - pb
+    ymax = 12
+    bw = iw / 24
+    out = [f'<svg viewBox="0 0 {w} {h}" role="img" aria-labelledby="tt td" class="chart">',
+           '<title id="tt">Average one-minute volatility by hour of day</title>',
+           '<desc id="td">Average realized volatility per minute in basis points for each UTC hour. '
+           'Volatility is highest from 14:00 to 21:00 UTC.</desc>']
+    for t in range(0, ymax + 1, 4):
+        y = pt + ih - t / ymax * ih
+        out.append(f'<line x1="{pl}" x2="{w - pr}" y1="{y:.1f}" y2="{y:.1f}" class="grid"/>'
+                   f'<text x="{pl - 8}" y="{y + 4:.1f}" class="tick" text-anchor="end">{t}</text>')
+    for r in rows:
+        hr = r["hour_utc"]
+        bh = r["rv_bps"] / ymax * ih
+        cls = "bar-as" if 14 <= hr <= 20 else "bar-sym"
+        out.append(f'<rect x="{pl + hr * bw + bw * 0.12:.1f}" y="{pt + ih - bh:.1f}" width="{bw * 0.76:.1f}" '
+                   f'height="{bh:.1f}" class="{cls}"/>')
+        if hr % 3 == 0:
+            out.append(f'<text x="{pl + hr * bw + bw / 2:.1f}" y="{h - 22}" class="tick" text-anchor="middle">{hr:02d}</text>')
+    out.append(f'<text x="{pl + iw / 2}" y="{h - 4}" class="axis" text-anchor="middle">Hour of day (UTC)</text>')
+    out.append(f'<text x="14" y="{pt + ih / 2}" class="axis" text-anchor="middle" transform="rotate(-90 14 {pt + ih / 2})">Volatility per minute (bps)</text>')
+    out.append("</svg>")
+    return "".join(out)
+
+
+def daily_rows() -> str:
+    rows = []
+    for d in AN["daily"]:
+        rows.append(f'<tr><th scope="row">{d["date"][5:]}</th><td class="num">{d["trades"]:,}</td>'
+                    f'<td class="num">{d["volume_btc"]:,.0f}</td>'
+                    f'<td class="num">{d["low"]:,.0f} to {d["high"]:,.0f}</td></tr>')
+    return "".join(rows)
+
+
+def quint_rows() -> str:
+    qs = AN["h2_imbalance"]["quintiles"]
+    m = max(abs(q["next_ret_bps"]) for q in qs)
+    rows = []
+    for i, q in enumerate(qs, 1):
+        cls = "b-profit" if q["next_ret_bps"] >= 0 else "b-risk"
+        rows.append(f'<tr><th scope="row">{i}</th><td class="num">{q["imb"]:+.2f}</td>'
+                    f'<td><span class="bar {cls}" style="width:{abs(q["next_ret_bps"]) / m * 100:.0f}%"></span>'
+                    f'<span class="num">{q["next_ret_bps"]:+.2f}</span></td></tr>')
+    return "".join(rows)
+
+
+tod = AN["time_of_day"]
+peak = max(tod, key=lambda r: r["rv_bps"])
+quiet = min(tod, key=lambda r: r["rv_bps"])
+h1, h2 = AN["h1_hourly"], AN["h2_imbalance"]
+
 A, S = R["as"], R["symmetric"]
 p = R["params"]
 html = Path(ROOT / "scripts" / "site_template.html").read_text()
@@ -65,6 +123,15 @@ for key, val in {
     "{{HIST}}": hist_svg(),
     "{{SWEEP}}": sweep_rows(),
     "{{REPO}}": REPO,
+    "{{TOD}}": tod_svg(), "{{DAILY}}": daily_rows(), "{{QUINT}}": quint_rows(),
+    "{{TRADES_TOTAL}}": f'{AN["total_trades"]:,}',
+    "{{VOL_RATIO}}": f'{peak["rv_bps"] / quiet["rv_bps"]:.1f}',
+    "{{PEAK_HR}}": f'{peak["hour_utc"]:02d}:00', "{{QUIET_HR}}": f'{quiet["hour_utc"]:02d}:00',
+    "{{PEAK_BPS}}": f'{peak["rv_bps"]:.1f}', "{{QUIET_BPS}}": f'{quiet["rv_bps"]:.1f}',
+    "{{SAME_CORR}}": f'{h2["corr_same_minute"]:.2f}', "{{NEXT_CORR}}": f'{h2["corr_next"]:.2f}',
+    "{{T_STAT}}": f'{h2["t_stat_hac"]:.1f}', "{{N_MIN}}": f'{h2["n_minutes"]:,}',
+    "{{ROLL_UNDEF}}": f'{h1["roll_bps_share_undefined"] * 100:.0f}', "{{H1_N}}": f'{h1["n_hours"]}',
+    "{{H1_RHO}}": f'{h1["spearman_rv_vs_roll"]:.2f}',
     "{{N}}": f'{R["n_paths"]:,}',
     "{{AS_PNL}}": f'{A["mean_wealth"]:.1f}', "{{SYM_PNL}}": f'{S["mean_wealth"]:.1f}',
     "{{AS_PSD}}": f'{A["std_wealth"]:.1f}', "{{SYM_PSD}}": f'{S["std_wealth"]:.1f}',
